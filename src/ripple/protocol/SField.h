@@ -43,7 +43,7 @@ Some fields have a different meaning for their
 class STAccount;
 class STAmount;
 class STBlob;
-template <std::size_t>
+template <int>
 class STBitString;
 template <class>
 class STInteger;
@@ -482,6 +482,11 @@ extern SF_AMOUNT const sfMinimumOffer;
 extern SF_AMOUNT const sfRippleEscrow;
 extern SF_AMOUNT const sfDeliveredAmount;
 extern SF_AMOUNT const sfNFTokenBrokerFee;
+
+// currency amount (fees)
+extern SF_AMOUNT const sfBaseFeeDrops;
+extern SF_AMOUNT const sfReserveBaseDrops;
+extern SF_AMOUNT const sfReserveIncrementDrops;
 
 // variable length (common)
 extern SF_VL const sfPublicKey;

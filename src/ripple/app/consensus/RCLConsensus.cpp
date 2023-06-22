@@ -86,9 +86,11 @@ RCLConsensus::Adaptor::Adaptor(
     , inboundTransactions_{inboundTransactions}
     , j_(journal)
     , validatorKeys_(validatorKeys)
-    , valCookie_{rand_int<std::uint64_t>(
-          1,
-          std::numeric_limits<std::uint64_t>::max())}
+    , valCookie_(
+          1 +
+          rand_int(
+              crypto_prng(),
+              std::numeric_limits<std::uint64_t>::max() - 1))
     , nUnlVote_(validatorKeys_.nodeID, j_)
 {
     assert(valCookie_ != 0);
@@ -211,15 +213,10 @@ RCLConsensus::Adaptor::propose(RCLCxPeerPos::Proposal const& proposal)
     prop.set_nodepubkey(
         validatorKeys_.publicKey.data(), validatorKeys_.publicKey.size());
 
-    auto signingHash = sha512Half(
-        HashPrefix::proposal,
-        std::uint32_t(proposal.proposeSeq()),
-        proposal.closeTime().time_since_epoch().count(),
-        proposal.prevLedger(),
-        proposal.position());
-
     auto sig = signDigest(
-        validatorKeys_.publicKey, validatorKeys_.secretKey, signingHash);
+        validatorKeys_.publicKey,
+        validatorKeys_.secretKey,
+        proposal.signingHash());
 
     prop.set_signature(sig.data(), sig.size());
 
@@ -340,7 +337,7 @@ RCLConsensus::Adaptor::onClose(
             // pseudo-transactions
             auto validations = app_.validators().negativeUNLFilter(
                 app_.getValidations().getTrustedForLedger(
-                    prevLedger->info().parentHash));
+                    prevLedger->info().parentHash, prevLedger->seq() - 1));
             if (validations.size() >= app_.validators().quorum())
             {
                 feeVote_->doVoting(prevLedger, validations, initialSet);
@@ -421,7 +418,9 @@ RCLConsensus::Adaptor::onAccept(
     Json::Value&& consensusJson)
 {
     app_.getJobQueue().addJob(
-        jtACCEPT, "acceptLedger", [=, cj = std::move(consensusJson)]() mutable {
+        jtACCEPT,
+        "acceptLedger",
+        [=, this, cj = std::move(consensusJson)]() mutable {
             // Note that no lock is held or acquired during this job.
             // This is because generic Consensus guarantees that once a ledger
             // is accepted, the consensus results and capture by reference state
@@ -840,7 +839,8 @@ RCLConsensus::Adaptor::validate(
             if (ledger.ledger_->isVotingLedger())
             {
                 // Fees:
-                feeVote_->doValidation(ledger.ledger_->fees(), v);
+                feeVote_->doValidation(
+                    ledger.ledger_->fees(), ledger.ledger_->rules(), v);
 
                 // Amendments
                 // FIXME: pass `v` and have the function insert the array
